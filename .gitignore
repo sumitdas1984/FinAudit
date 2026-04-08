@@ -13,3 +13,6 @@ wheels/
 .hypothesis/tmp/
 .hypothesis/unicode_data/
 .hypothesis/constants/
+
+# Environment variables
+.env

@@ -17,6 +17,7 @@ dependencies = [
     "pytest",
     "pytest-asyncio",
     "python-multipart",
+    "python-dotenv",
 ]
 
 [tool.pytest.ini_options]
