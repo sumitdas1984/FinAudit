@@ -29,7 +29,7 @@ The Automated Personal Finance Audit Tool is a data pipeline application that in
 1. WHEN a CSV file is uploaded, THE Ingestion_Service SHALL identify the source bank by inspecting the CSV header row and selecting the matching Bank_Adapter.
 2. WHEN a Bank_Adapter is selected, THE Ingestion_Service SHALL map the source columns to the unified Transaction schema fields: `date`, `description`, and `amount`.
 3. IF no Bank_Adapter matches the uploaded CSV header, THEN THE Ingestion_Service SHALL return an error response with a human-readable message identifying the unrecognized header columns.
-4. THE Ingestion_Service SHALL support Bank_Adapters for at least HDFC savings account, ICICI savings account, and generic credit card statement formats at initial release.
+4. THE Ingestion_Service SHALL support Bank_Adapters for at least HDFC savings account, ICICI savings account, SBI savings account, Kotak savings account, Axis savings account, and generic credit card statement formats at initial release.
 5. WHEN multiple files are uploaded in a single request, THE Ingestion_Service SHALL process each file independently and merge the resulting Transactions into a single response payload.
 6. WHEN a PDF file is uploaded, THE Ingestion_Service SHALL pass the file to the PDF_Parser to extract raw text before Bank_Adapter selection.
 7. WHEN the PDF_Parser receives a PDF file, THE PDF_Parser SHALL extract all text content from every page and return it as a structured string for downstream parsing.

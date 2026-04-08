@@ -8,3 +8,8 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Hypothesis cache (keep .hypothesis/examples/ for CI reproducibility)
+.hypothesis/tmp/
+.hypothesis/unicode_data/
+.hypothesis/constants/
