@@ -54,7 +54,7 @@ with st.sidebar:
             for f in uploaded_files
         ]
         try:
-            response = requests.post(f"{API_BASE}/upload", files=files_payload, timeout=30)
+            response = requests.post(f"{API_BASE}/upload", files=files_payload, timeout=120)
             if response.status_code == 200:
                 data = response.json()
                 st.session_state.transactions = data.get("transactions", [])
