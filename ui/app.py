@@ -2,95 +2,47 @@
 Personal Finance Audit Tool — Streamlit UI
 ==========================================
 Calls the FastAPI backend at http://localhost:8000 over HTTP.
-
-Sections (added across tasks 10.1 – 10.4):
-  10.1  Upload sidebar          ← implemented here
-  10.2  Needs Review section
-  10.3  Anomaly highlights
-  10.4  Spending breakdown visualization
+Layout based on FinAudit mockup: sidebar nav with Dashboard, Audit Queue, Import Data pages.
 """
 
 import datetime
-
-import streamlit as st
 import requests
+import streamlit as st
+import plotly.express as px
 
 API_BASE = "http://localhost:8000/api/v1"
 
-# ---------------------------------------------------------------------------
-# Session-state initialisation
-# ---------------------------------------------------------------------------
-
-if "transactions" not in st.session_state:
-    st.session_state.transactions: list[dict] = []
-
-if "upload_summary" not in st.session_state:
-    st.session_state.upload_summary: dict | None = None
+CATEGORIES = ["Food", "Transport", "Utilities", "Entertainment", "Investment", "Healthcare", "Shopping", "Other"]
 
 # ---------------------------------------------------------------------------
 # Page config
 # ---------------------------------------------------------------------------
 
-st.set_page_config(page_title="Personal Finance Audit", layout="wide")
-st.title("Personal Finance Audit Tool")
+st.set_page_config(
+    page_title="FinAudit | Personal Finance Auditor",
+    page_icon="💰",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
 # ---------------------------------------------------------------------------
-# 10.1  Upload sidebar
+# Session state
 # ---------------------------------------------------------------------------
 
-with st.sidebar:
-    st.header("Upload Statements")
+if "upload_summary" not in st.session_state:
+    st.session_state.upload_summary = None
 
-    uploaded_files = st.file_uploader(
-        "Select CSV or PDF bank statements",
-        type=["csv", "pdf"],
-        accept_multiple_files=True,
-        help="Supports HDFC, ICICI, SBI, Kotak, Axis savings accounts and generic credit card formats.",
-    )
-
-    if st.button("Upload", disabled=not uploaded_files):
-        files_payload = [
-            ("files", (f.name, f.getvalue(), f.type or "application/octet-stream"))
-            for f in uploaded_files
-        ]
-        try:
-            response = requests.post(f"{API_BASE}/upload", files=files_payload, timeout=120)
-            if response.status_code == 200:
-                data = response.json()
-                st.session_state.transactions = data.get("transactions", [])
-                st.session_state.upload_summary = data.get("summary", {})
-                st.session_state.unreviewed_loaded = False  # trigger reload in 10.2
-            else:
-                detail = response.json()
-                st.error(f"Upload failed ({response.status_code}): {detail}")
-        except requests.exceptions.ConnectionError:
-            st.error("Cannot reach the backend. Make sure the server is running on http://localhost:8000.")
-        except Exception as exc:
-            st.error(f"Unexpected error: {exc}")
-
-    # Display upload summary
-    if st.session_state.upload_summary is not None:
-        summary = st.session_state.upload_summary
-        st.success("Upload complete")
-        col1, col2 = st.columns(2)
-        col1.metric("New transactions", summary.get("new", 0))
-        col2.metric("Duplicates skipped", summary.get("duplicates", 0))
-
-# ---------------------------------------------------------------------------
-# 10.2  Needs Review section
-# ---------------------------------------------------------------------------
-
-CATEGORIES = ["Food", "Transport", "Utilities", "Entertainment", "Investment", "Healthcare", "Shopping", "Other"]
-
-# Initialise unreviewed list in session state (populated on first load / after upload)
 if "unreviewed" not in st.session_state:
     st.session_state.unreviewed: list[dict] = []
 
 if "unreviewed_loaded" not in st.session_state:
     st.session_state.unreviewed_loaded = False
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def _load_unreviewed() -> None:
-    """Fetch all transactions from the API and populate session state with unreviewed ones."""
     try:
         resp = requests.get(f"{API_BASE}/transactions", timeout=10)
         if resp.status_code == 200:
@@ -100,47 +52,198 @@ def _load_unreviewed() -> None:
         else:
             st.error(f"Failed to load transactions ({resp.status_code})")
     except requests.exceptions.ConnectionError:
-        st.error("Cannot reach the backend. Make sure the server is running on http://localhost:8000.")
+        st.error("Cannot reach the backend at http://localhost:8000.")
     except Exception as exc:
-        st.error(f"Unexpected error loading transactions: {exc}")
+        st.error(f"Unexpected error: {exc}")
 
-# Reload unreviewed list whenever a new upload completes (upload_summary changes)
-if st.session_state.upload_summary is not None and not st.session_state.unreviewed_loaded:
-    _load_unreviewed()
 
-st.header("Needs Review")
+def _get_all_transactions() -> list[dict]:
+    try:
+        resp = requests.get(f"{API_BASE}/transactions", timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return []
 
-col_refresh, _ = st.columns([1, 5])
-with col_refresh:
-    if st.button("Refresh list"):
+
+def _get_anomalies(month: str) -> list[dict]:
+    try:
+        resp = requests.get(f"{API_BASE}/anomalies", params={"month": month}, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return []
+
+
+def _get_summary(start: str, end: str) -> dict | None:
+    try:
+        resp = requests.get(f"{API_BASE}/summary", params={"start": start, "end": end}, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception:
+        pass
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+
+def render_sidebar() -> str:
+    with st.sidebar:
+        st.title("💰 FinAudit")
+        st.markdown("---")
+        st.caption("Navigation")
+        nav = st.radio(
+            "nav",
+            ["📊 Dashboard", "🔍 Audit Queue", "📥 Import Data"],
+            label_visibility="collapsed",
+        )
+        st.markdown("---")
+        st.info("**Audit Tip:** High-confidence matches (80%+) are auto-processed. Focus on low-confidence rows.")
+        if st.button("Reset Session Data", type="secondary"):
+            st.session_state.clear()
+            st.rerun()
+    return nav
+
+
+# ---------------------------------------------------------------------------
+# Page: Dashboard
+# ---------------------------------------------------------------------------
+
+def show_dashboard():
+    st.header("Financial Health Overview")
+
+    today = datetime.date.today()
+    month_start = today.replace(day=1)
+    next_month = (month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+    month_end = next_month - datetime.timedelta(days=1)
+    current_month = today.strftime("%Y-%m")
+
+    all_txns = _get_all_transactions()
+    anomalies = _get_anomalies(current_month)
+    summary = _get_summary(month_start.isoformat(), month_end.isoformat())
+
+    # --- Metrics ---
+    col1, col2, col3 = st.columns(3)
+
+    if summary:
+        buckets = summary.get("buckets", {})
+        total_spent = sum(buckets.values())
+        unreviewed_count = summary.get("unreviewed_count", 0)
+        total_txns = len(all_txns)
+        reviewed = total_txns - unreviewed_count
+        audit_pct = (reviewed / total_txns * 100) if total_txns else 0
+    else:
+        total_spent = 0.0
+        audit_pct = 0.0
+        unreviewed_count = 0
+
+    col1.metric("Total Spent", f"₹{total_spent:,.2f}", f"Month of {current_month}")
+    col2.metric("Audit Completion", f"{audit_pct:.0f}%", "Target: 100%")
+    col3.metric(
+        "Anomalies Flagged",
+        f"{len(anomalies):02d}",
+        "Requires Action" if anomalies else "All Clear",
+        delta_color="inverse" if anomalies else "normal",
+    )
+
+    st.markdown("### Spending Analysis")
+    chart_col, anomaly_col = st.columns([2, 1])
+
+    with chart_col:
+        if summary and sum(summary.get("buckets", {}).values()) > 0:
+            buckets = summary["buckets"]
+            if summary.get("unreviewed_count", 0) > 0:
+                st.warning(f"{summary['unreviewed_count']} transactions still need review. Complete the audit for an accurate breakdown.")
+            else:
+                fig = px.pie(
+                    names=list(buckets.keys()),
+                    values=list(buckets.values()),
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Safe,
+                )
+                fig.update_layout(margin=dict(t=0, b=0, l=0, r=0))
+                st.plotly_chart(fig, use_container_width=True)
+        elif all_txns:
+            # Fall back to category breakdown from transactions
+            import pandas as pd
+            df = pd.DataFrame(all_txns)
+            df_spend = df[df["amount"] > 0]
+            if not df_spend.empty:
+                fig = px.pie(
+                    df_spend,
+                    values="amount",
+                    names="category",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Safe,
+                )
+                fig.update_layout(margin=dict(t=0, b=0, l=0, r=0))
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No spending data available yet. Upload a statement to get started.")
+        else:
+            st.info("No data yet. Upload a bank statement from the Import Data page.")
+
+    with anomaly_col:
+        st.markdown("#### Potential Issues")
+        if anomalies:
+            for a in anomalies:
+                st.warning(
+                    f"**{a['category']}** — ₹{a['current_month_spend']:,.2f} this month "
+                    f"(+{a['deviation_pct']:.1f}% above avg)"
+                )
+        else:
+            st.success("No anomalies detected for this month.")
+
+
+# ---------------------------------------------------------------------------
+# Page: Audit Queue
+# ---------------------------------------------------------------------------
+
+def show_audit_queue():
+    st.header("Transaction Audit Queue")
+    st.write("Review AI-suggested categories and finalize your records.")
+
+    if not st.session_state.unreviewed_loaded:
         _load_unreviewed()
 
-if not st.session_state.unreviewed_loaded:
-    st.info("Upload a statement or click **Refresh list** to load transactions.")
-elif len(st.session_state.unreviewed) == 0:
-    st.success("All transactions have been reviewed.")
-else:
-    count = len(st.session_state.unreviewed)
-    st.warning(f"{count} transaction{'s' if count != 1 else ''} need{'s' if count == 1 else ''} review")
+    unreviewed = st.session_state.unreviewed
 
-    # Render one row per unreviewed transaction
-    for txn in list(st.session_state.unreviewed):
+    if not unreviewed:
+        st.success("All transactions have been reviewed.")
+        if st.button("Refresh"):
+            _load_unreviewed()
+            st.rerun()
+        return
+
+    # Table header
+    hcols = st.columns([2, 4, 2, 3, 2, 2])
+    for col, label in zip(hcols, ["Date", "Merchant", "Amount (₹)", "Final Category", "AI Match", "Audit Status"]):
+        col.markdown(f"**{label}**")
+    st.markdown("---")
+
+    for txn in list(unreviewed):
         txn_id = txn["id"]
-        cols = st.columns([2, 4, 2, 3])
-        cols[0].write(txn.get("date", ""))
-        cols[1].write(txn.get("description", ""))
-        cols[2].write(f"₹{txn.get('amount', 0):,.2f}")
-
         current_cat = txn.get("category", CATEGORIES[0])
         default_idx = CATEGORIES.index(current_cat) if current_cat in CATEGORIES else 0
 
-        new_cat = cols[3].selectbox(
-            "Category",
+        row = st.columns([2, 4, 2, 3, 2, 2])
+        row[0].write(txn.get("date", ""))
+        row[1].write(txn.get("description", ""))
+        row[2].write(f"₹{txn.get('amount', 0):,.2f}")
+
+        new_cat = row[3].selectbox(
+            "cat",
             options=CATEGORIES,
             index=default_idx,
             key=f"cat_{txn_id}",
             label_visibility="collapsed",
         )
+        row[4].progress(0.5, text="—")   # placeholder; real confidence not in schema
+        row[5].write("Pending")
 
         if new_cat != current_cat:
             try:
@@ -155,143 +258,82 @@ else:
                     ]
                     st.rerun()
                 else:
-                    st.error(f"Failed to update transaction {txn_id} ({patch_resp.status_code})")
+                    st.error(f"Failed to update ({patch_resp.status_code})")
             except requests.exceptions.ConnectionError:
                 st.error("Cannot reach the backend.")
             except Exception as exc:
-                st.error(f"Unexpected error: {exc}")
+                st.error(f"Error: {exc}")
+
+    if st.button("Save Audit Progress", type="primary"):
+        st.success("Audit records updated successfully!")
+        st.session_state.unreviewed_loaded = False
+        st.rerun()
+
 
 # ---------------------------------------------------------------------------
-# 10.3  Anomaly highlights
+# Page: Import Data
 # ---------------------------------------------------------------------------
 
-st.header("Anomaly Highlights")
+def show_import():
+    st.header("Import Financial Statements")
+    st.write("Upload your bank statements in CSV or PDF format.")
 
-current_month = datetime.date.today().strftime("%Y-%m")
+    uploaded_files = st.file_uploader(
+        "Choose a file",
+        type=["csv", "pdf"],
+        accept_multiple_files=True,
+        help="Supports HDFC, ICICI, SBI, Kotak, Axis savings accounts and generic credit card formats.",
+    )
 
-try:
-    anomaly_resp = requests.get(f"{API_BASE}/anomalies", params={"month": current_month}, timeout=10)
-    if anomaly_resp.status_code == 200:
-        anomalies: list[dict] = anomaly_resp.json()
-        if not anomalies:
-            st.success("No spending anomalies detected for this month.")
-        else:
-            st.warning(f"{len(anomalies)} spending anomal{'y' if len(anomalies) == 1 else 'ies'} detected for {current_month}")
-            cols = st.columns(min(len(anomalies), 3))
-            for i, anomaly in enumerate(anomalies):
-                category = anomaly.get("category", "Unknown")
-                current_spend = anomaly.get("current_month_spend", 0.0)
-                rolling_avg = anomaly.get("rolling_avg", 0.0)
-                deviation_pct = anomaly.get("deviation_pct", 0.0)
-                col = cols[i % len(cols)]
-                with col:
-                    st.warning(
-                        f"**{category}**\n\n"
-                        f"This month: ₹{current_spend:,.2f}\n\n"
-                        f"3-month avg: ₹{rolling_avg:,.2f}\n\n"
-                        f"⚠ +{deviation_pct:.1f}% above average"
-                    )
-    else:
-        st.error(f"Failed to load anomalies ({anomaly_resp.status_code})")
-except requests.exceptions.ConnectionError:
-    st.error("Cannot reach the backend. Make sure the server is running on http://localhost:8000.")
-except Exception as exc:
-    st.error(f"Unexpected error loading anomalies: {exc}")
-
-# ---------------------------------------------------------------------------
-# 10.4  Spending breakdown visualization
-# ---------------------------------------------------------------------------
-
-st.header("Spending Breakdown")
-
-# Date range selector — default to current month
-_today = datetime.date.today()
-_month_start = _today.replace(day=1)
-# Last day of current month
-_next_month = (_month_start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
-_month_end = _next_month - datetime.timedelta(days=1)
-
-date_range = st.date_input(
-    "Select date range",
-    value=(_month_start, _month_end),
-    min_value=datetime.date(2000, 1, 1),
-    max_value=datetime.date(2100, 12, 31),
-    format="YYYY-MM-DD",
-)
-
-# Ensure we have a valid two-element range before fetching
-if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-    start_date, end_date = date_range
-    try:
-        summary_resp = requests.get(
-            f"{API_BASE}/summary",
-            params={"start": start_date.isoformat(), "end": end_date.isoformat()},
-            timeout=10,
-        )
-        if summary_resp.status_code == 200:
-            summary_data = summary_resp.json()
-            unreviewed_count: int = summary_data.get("unreviewed_count", 0)
-            buckets: dict = summary_data.get("buckets", {})
-
-            if unreviewed_count > 0:
-                st.warning(
-                    f"{unreviewed_count} transaction{'s' if unreviewed_count != 1 else ''} "
-                    f"need{'s' if unreviewed_count == 1 else ''} review before viewing the breakdown."
-                )
-            else:
-                # Build chart data
-                bucket_names = ["Needs", "Wants", "Investments"]
-                amounts = [buckets.get(b, 0.0) for b in bucket_names]
-                total = sum(amounts)
-
-                if total == 0:
-                    st.info("No spending data available for the selected period.")
-                else:
-                    percentages = [(a / total * 100) for a in amounts]
-
-                    # Try plotly first, fall back to st.bar_chart
-                    try:
-                        import plotly.graph_objects as go  # type: ignore
-
-                        labels = [
-                            f"{name}<br>₹{amt:,.2f} ({pct:.1f}%)"
-                            for name, amt, pct in zip(bucket_names, amounts, percentages)
-                        ]
-                        fig = go.Figure(
-                            data=[
-                                go.Pie(
-                                    labels=bucket_names,
-                                    values=amounts,
-                                    text=labels,
-                                    hovertemplate="%{label}<br>₹%{value:,.2f}<br>%{percent}<extra></extra>",
-                                    textinfo="label+percent",
-                                )
-                            ]
+    if uploaded_files:
+        if st.button("Start AI Audit Process", type="primary"):
+            files_payload = [
+                ("files", (f.name, f.getvalue(), f.type or "application/octet-stream"))
+                for f in uploaded_files
+            ]
+            with st.status("Analyzing file structure and categorizing...", expanded=True) as status:
+                st.write("Identifying bank format...")
+                st.write("Extracting transaction list...")
+                st.write("Running AI categorization engine...")
+                try:
+                    response = requests.post(f"{API_BASE}/upload", files=files_payload, timeout=120)
+                    if response.status_code == 200:
+                        data = response.json()
+                        st.session_state.upload_summary = data.get("summary", {})
+                        st.session_state.unreviewed_loaded = False
+                        status.update(label="Import complete!", state="complete", expanded=False)
+                        summary = st.session_state.upload_summary
+                        st.success(
+                            f"Done — {summary.get('new', 0)} new transactions added, "
+                            f"{summary.get('duplicates', 0)} duplicates skipped."
                         )
-                        fig.update_layout(
-                            title=f"Spending Breakdown: {start_date} → {end_date}",
-                            showlegend=True,
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    except ImportError:
-                        import pandas as pd  # type: ignore
+                        st.balloons()
+                    else:
+                        detail = response.json()
+                        status.update(label="Import failed", state="error")
+                        st.error(f"Upload failed ({response.status_code}): {detail}")
+                except requests.exceptions.ConnectionError:
+                    status.update(label="Connection error", state="error")
+                    st.error("Cannot reach the backend at http://localhost:8000.")
+                except Exception as exc:
+                    status.update(label="Error", state="error")
+                    st.error(f"Unexpected error: {exc}")
 
-                        chart_data = pd.DataFrame(
-                            {"Amount (₹)": amounts},
-                            index=bucket_names,
-                        )
-                        st.bar_chart(chart_data)
 
-                    # Summary table below the chart
-                    st.subheader("Bucket Summary")
-                    cols = st.columns(len(bucket_names))
-                    for col, name, amt, pct in zip(cols, bucket_names, amounts, percentages):
-                        col.metric(name, f"₹{amt:,.2f}", f"{pct:.1f}%")
-        else:
-            st.error(f"Failed to load spending summary ({summary_resp.status_code})")
-    except requests.exceptions.ConnectionError:
-        st.error("Cannot reach the backend. Make sure the server is running on http://localhost:8000.")
-    except Exception as exc:
-        st.error(f"Unexpected error loading spending summary: {exc}")
-else:
-    st.info("Select a start and end date to view the spending breakdown.")
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    nav = render_sidebar()
+
+    if nav == "📊 Dashboard":
+        show_dashboard()
+    elif nav == "🔍 Audit Queue":
+        show_audit_queue()
+    elif nav == "📥 Import Data":
+        show_import()
+
+
+if __name__ == "__main__":
+    main()

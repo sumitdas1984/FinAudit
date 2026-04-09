@@ -18,6 +18,7 @@ dependencies = [
     "pytest-asyncio",
     "python-multipart",
     "python-dotenv",
+    "plotly",
 ]
 
 [tool.pytest.ini_options]
