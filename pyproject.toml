@@ -1,0 +1,25 @@
+[project]
+name = "finaudit"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+    "pdfplumber",
+    "hypothesis",
+    "streamlit",
+    "openai",
+    "fpdf2",
+    "httpx",
+    "pytest",
+    "pytest-asyncio",
+    "python-multipart",
+    "python-dotenv",
+    "plotly",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

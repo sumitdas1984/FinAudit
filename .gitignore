@@ -1,0 +1,21 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Hypothesis cache (keep .hypothesis/examples/ for CI reproducibility)
+.hypothesis/tmp/
+.hypothesis/unicode_data/
+.hypothesis/constants/
+
+# Environment variables
+.env
+
+# SQLite database (auto-generated, may contain personal data)
+*.db
