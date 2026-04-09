@@ -16,3 +16,6 @@ wheels/
 
 # Environment variables
 .env
+
+# SQLite database (auto-generated, may contain personal data)
+*.db
