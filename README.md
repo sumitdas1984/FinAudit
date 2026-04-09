@@ -220,8 +220,73 @@ uv run pytest tests/unit/test_pdf_parser.py
 
 ## License
 
-[Add your license here]
+This project is licensed under the **MIT License**.
+
+```
+MIT License
+
+Copyright (c) 2025 FinAudit Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Contributing
 
-[Add contribution guidelines here]
+Contributions are welcome. Please follow these guidelines to keep the codebase consistent.
+
+### Getting Started
+
+1. Fork the repository and create a branch from `main`:
+   ```bash
+   git checkout -b feature/your-feature-name
+   ```
+
+2. Install dependencies:
+   ```bash
+   uv sync
+   ```
+
+3. Make your changes, then run the full test suite before submitting:
+   ```bash
+   uv run pytest -v
+   ```
+
+### Guidelines
+
+- **Code style**: Follow PEP 8. Keep functions small and focused.
+- **Type hints**: All new functions must include type annotations.
+- **Tests**: Every new feature or bug fix must include a corresponding test. Property-based tests (Hypothesis) are preferred for logic-heavy components.
+- **Commits**: Use clear, descriptive commit messages in the imperative mood (e.g. `Add Kotak PDF adapter`, not `Added` or `Adding`).
+- **New bank adapters**: Follow the pattern in `app/adapters/` and add a fixture CSV in `tests/fixtures/` along with a unit test.
+- **API changes**: If you modify the `/api/v1/` contract, update the Pydantic schemas in `app/models/schemas.py` and ensure existing tests still pass.
+
+### Pull Request Process
+
+1. Ensure all tests pass and there are no linting errors.
+2. Update the README if your change adds new functionality or changes existing behaviour.
+3. Open a pull request against `main` with a clear description of what the change does and why.
+4. A maintainer will review and merge once approved.
+
+### Reporting Issues
+
+Open a GitHub issue with:
+- A clear description of the problem
+- Steps to reproduce
+- Expected vs actual behaviour
+- Python version and OS
